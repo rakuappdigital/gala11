@@ -35,7 +35,7 @@ const SQUAD_IDS = [
   "yunus",
 ];
 
-const PROSPECT_IDS = ["alvarez", "pape-sarr", "van-dijk"];
+const PROSPECT_IDS = ["alvarez", "pape-sarr", "van-dijk", "deniz", "ponomarenko", "yusuf"];
 
 export const INITIAL_SQUAD: Player[] = SQUAD_IDS.map((id) => ({
   id,

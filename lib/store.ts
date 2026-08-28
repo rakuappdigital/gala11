@@ -29,7 +29,7 @@ type GalaState = {
 
   setFormation: (name: string) => void;
   movePlayer: (playerId: string, dest: Destination) => void;
-  addProspectToSquad: (playerId: string) => void;
+  buyProspect: (playerId: string, amount: number) => void;
   sellPlayer: (playerId: string, amount: number) => void;
   loanPlayer: (playerId: string, amount: number) => void;
   firePlayer: (playerId: string) => void;
@@ -192,11 +192,23 @@ export const useGalaStore = create<GalaState>()(
           set({ starters, bench, reserve, prospects });
         },
 
-        addProspectToSquad: (playerId) => {
+        buyProspect: (playerId, amount) => {
           const state = get();
           const prospects = state.prospects.filter((id) => id !== playerId);
           const reserve = [...state.reserve, playerId];
-          set({ prospects, reserve });
+
+          const player = INITIAL_SQUAD.find((p) => p.id === playerId) ?? PROSPECTS.find((p) => p.id === playerId);
+          const transaction: Transaction = {
+            id: `${playerId}-${Date.now()}`,
+            playerId,
+            playerName: player?.name ?? playerId,
+            playerImg: player?.img ?? "",
+            type: "satin-al",
+            amount,
+            createdAt: Date.now(),
+          };
+
+          set({ prospects, reserve, transactions: [transaction, ...state.transactions] });
         },
 
         sellPlayer: (playerId, amount) => {
@@ -224,8 +236,20 @@ export const useGalaStore = create<GalaState>()(
           const tx = state.transactions.find((t) => t.id === transactionId);
           if (!tx) return;
           const transactions = state.transactions.filter((t) => t.id !== transactionId);
-          const reserve = [...state.reserve, tx.playerId];
-          set({ transactions, reserve });
+
+          if (tx.type === "satin-al") {
+            const starters = { ...state.starters };
+            const bench = [...state.bench];
+            const reserve = [...state.reserve];
+            const prospects = [...state.prospects];
+            const loc = locateIn(tx.playerId, starters, bench, reserve, prospects);
+            if (loc.where !== "none") removeFromLocation(loc, starters, bench, reserve, prospects);
+            prospects.push(tx.playerId);
+            set({ transactions, starters, bench, reserve, prospects });
+          } else {
+            const reserve = [...state.reserve, tx.playerId];
+            set({ transactions, reserve });
+          }
         },
       };
     },
