@@ -15,6 +15,7 @@ import Report from "@/components/Report";
 import AmountInput, { AmountUnit, unitMultiplier } from "@/components/AmountInput";
 import { useGalaStore, BoardKey } from "@/lib/store";
 import { ALL_PLAYERS } from "@/lib/players-data";
+import { PLAYER_ROLES, PROSPECT_ROLES, ROLE_LABELS, findSlotForRole } from "@/lib/player-roles";
 
 type Tab = "saha" | "transfer";
 type MenuState = { playerId: string; x: number; y: number; kind: "pitch" | "list" } | null;
@@ -103,7 +104,7 @@ export default function Home() {
     if (!reportRef.current) return;
     setDownloading(true);
     try {
-      const dataUrl = await toPng(reportRef.current, { pixelRatio: 2 });
+      const dataUrl = await toPng(reportRef.current, { pixelRatio: 2, cacheBust: true });
       const link = document.createElement("a");
       link.download = `gala11-rapor-${Date.now()}.png`;
       link.href = dataUrl;
@@ -113,8 +114,49 @@ export default function Home() {
     }
   }
 
+  async function handleShareReport() {
+    if (!reportRef.current) return;
+    setDownloading(true);
+    try {
+      const dataUrl = await toPng(reportRef.current, { pixelRatio: 2, cacheBust: true });
+      const blob = await (await fetch(dataUrl)).blob();
+      const file = new File([blob], `gala11-rapor-${Date.now()}.png`, { type: "image/png" });
+
+      if (typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: "gala11 Kadro Raporu" });
+        return;
+      }
+
+      const link = document.createElement("a");
+      link.download = file.name;
+      link.href = dataUrl;
+      link.click();
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent("gala11 kadro raporu — indirilen görseli sohbete ekleyebilirsin.")}`,
+        "_blank"
+      );
+    } catch (err) {
+      if ((err as Error)?.name !== "AbortError") {
+        console.error(err);
+      }
+    } finally {
+      setDownloading(false);
+    }
+  }
+
+  function ownRoleAction(playerId: string): MenuAction | null {
+    const role = PLAYER_ROLES[playerId] ?? PROSPECT_ROLES[playerId];
+    const targetSlot = findSlotForRole(role, Object.keys(starters));
+    if (!targetSlot) return null;
+    return {
+      label: `Asıl Mevkisine Al (${ROLE_LABELS[role] ?? role})`,
+      onClick: () => movePlayer(playerId, { type: "slot", slotId: targetSlot }),
+    };
+  }
+
   const pitchActions: MenuAction[] = menu
     ? [
+        ...(ownRoleAction(menu.playerId) ? [ownRoleAction(menu.playerId) as MenuAction] : []),
         {
           label: "Yedeğe Al",
           onClick: () => setDialog({ kind: "benchConfirm", playerId: menu.playerId }),
@@ -124,6 +166,7 @@ export default function Home() {
 
   const listActions: MenuAction[] = menu
     ? [
+        ...(ownRoleAction(menu.playerId) ? [ownRoleAction(menu.playerId) as MenuAction] : []),
         { label: "Sat", onClick: () => setDialog({ kind: "amount", playerId: menu.playerId, type: "sat" }) },
         { label: "Kirala", onClick: () => setDialog({ kind: "amount", playerId: menu.playerId, type: "kirala" }) },
         { label: "Kov", danger: true, onClick: () => setDialog({ kind: "fireConfirm", playerId: menu.playerId }) },
@@ -399,7 +442,7 @@ export default function Home() {
           >
             <div className="flex flex-col gap-4 max-w-full" onClick={(e) => e.stopPropagation()}>
               <div className="overflow-auto max-h-[75vh] rounded-xl shadow-2xl border border-white/20">
-                <div style={{ transform: "scale(0.7)", transformOrigin: "top left", width: 1200 * 0.7 }}>
+                <div style={{ transform: "scale(0.45)", transformOrigin: "top left", width: 1080 * 0.45 }}>
                   <Report
                     ref={reportRef}
                     asBoard={boards.as}
@@ -408,12 +451,19 @@ export default function Home() {
                   />
                 </div>
               </div>
-              <div className="flex gap-2 justify-end">
+              <div className="flex gap-2 justify-end flex-wrap">
                 <button
                   onClick={() => setReportOpen(false)}
                   className="px-4 py-2 rounded-lg text-sm bg-white/10 hover:bg-white/20 text-white"
                 >
                   Kapat
+                </button>
+                <button
+                  onClick={handleShareReport}
+                  disabled={downloading}
+                  className="px-4 py-2 rounded-lg text-sm bg-green-500 text-white font-semibold hover:bg-green-400 disabled:opacity-50"
+                >
+                  {downloading ? "Hazırlanıyor..." : "Paylaş (WhatsApp)"}
                 </button>
                 <button
                   onClick={handleDownloadReport}

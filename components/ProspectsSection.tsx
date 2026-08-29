@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { ALL_PLAYERS } from "@/lib/players-data";
-import { PROSPECT_ROLES } from "@/lib/auto-team";
+import { PROSPECT_ROLES, ROLE_LABELS } from "@/lib/player-roles";
 
 export default function ProspectsSection({
   playerIds,
@@ -36,9 +36,9 @@ export default function ProspectsSection({
                   />
                 </div>
                 <span className="text-[10px] text-white/80 max-w-[64px] truncate">{player.name}</span>
-                {PROSPECT_ROLES[id] && (
+                {ROLE_LABELS[PROSPECT_ROLES[id]] && (
                   <span className="text-[9px] text-yellow-400/80 max-w-[70px] text-center leading-tight">
-                    {PROSPECT_ROLES[id]}
+                    {ROLE_LABELS[PROSPECT_ROLES[id]]}
                   </span>
                 )}
                 <button

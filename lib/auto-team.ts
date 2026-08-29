@@ -16,11 +16,3 @@ export const AUTO_STARTERS: Record<string, string> = {
 };
 
 export const AUTO_BENCH: string[] = ["jankat", "gunay", "baris", "yunus", "canarmando", "arda", "berat"];
-
-export const PROSPECT_ROLES: Record<string, string> = {
-  alvarez: "Sağ Açık (İleri)",
-  "van-dijk": "Sağ Stoper",
-  yusuf: "Yedek Sağ Stoper",
-  ponomarenko: "Yedek Santrafor",
-  deniz: "Yedek Santrafor",
-};
