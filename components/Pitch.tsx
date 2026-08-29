@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useDroppable } from "@dnd-kit/core";
 import PlayerChip from "./PlayerChip";
 import { getFormation, FORMATIONS } from "@/lib/formations";
@@ -59,16 +60,17 @@ export default function Pitch({
   onPlayerClick: (playerId: string, e: React.MouseEvent) => void;
 }) {
   const slots = getFormation(formation).slots;
+  const [half, setHalf] = useState(false);
 
   return (
-    <div className="flex flex-col gap-3 w-full">
+    <div className="flex flex-col gap-3 w-full max-w-[440px] mx-auto lg:mx-0">
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-sm text-white/70 font-medium">Formasyon:</span>
         {FORMATIONS.map((f) => (
           <button
             key={f.name}
             onClick={() => onFormationChange(f.name)}
-            className={`px-3 py-1 rounded-full text-sm font-semibold border transition ${
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
               f.name === formation
                 ? "bg-yellow-400 text-red-900 border-yellow-400"
                 : "bg-white/10 text-white border-white/20 hover:bg-white/20"
@@ -79,17 +81,45 @@ export default function Pitch({
         ))}
       </div>
 
+      <div className="flex items-center gap-2">
+        <span className="text-sm text-white/70 font-medium">Saha:</span>
+        <button
+          onClick={() => setHalf(false)}
+          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
+            !half
+              ? "bg-yellow-400 text-red-900 border-yellow-400"
+              : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+          }`}
+        >
+          Tam Saha
+        </button>
+        <button
+          onClick={() => setHalf(true)}
+          className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition ${
+            half
+              ? "bg-yellow-400 text-red-900 border-yellow-400"
+              : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+          }`}
+        >
+          Yarım Saha
+        </button>
+      </div>
+
       <div
         className="relative w-full rounded-xl overflow-hidden border-2 border-white/30 shadow-2xl"
         style={{
-          aspectRatio: "68 / 100",
+          aspectRatio: half ? "68 / 62" : "68 / 100",
           background:
             "repeating-linear-gradient(0deg, #1a7a34, #1a7a34 10%, #1f8a3b 10%, #1f8a3b 20%)",
         }}
       >
         <div className="absolute inset-3 border-2 border-white/50 rounded-sm" />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/50" />
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full border-t-2 border-white/50" />
+        {!half && (
+          <>
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-24 h-24 rounded-full border-2 border-white/50" />
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full border-t-2 border-white/50" />
+          </>
+        )}
         <div className="absolute left-1/2 top-3 -translate-x-1/2 w-[45%] h-[16%] border-2 border-t-0 border-white/50" />
         <div className="absolute left-1/2 bottom-3 -translate-x-1/2 w-[45%] h-[16%] border-2 border-b-0 border-white/50" />
 

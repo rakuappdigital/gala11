@@ -39,7 +39,7 @@ export default function ProspectsSection({
                   onClick={() => onBuyClick(id)}
                   className="text-[10px] px-2 py-0.5 rounded bg-yellow-400 text-red-900 font-semibold hover:bg-yellow-300"
                 >
-                  Satın Al
+                  Transfer Et
                 </button>
               </div>
             );

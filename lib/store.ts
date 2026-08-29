@@ -26,6 +26,7 @@ type GalaState = {
   prospects: string[];
   transactions: Transaction[];
   formationHistory: Record<string, SlotAssignment>;
+  preResetSnapshot: { starters: SlotAssignment; bench: string[]; reserve: string[] } | null;
 
   setFormation: (name: string) => void;
   movePlayer: (playerId: string, dest: Destination) => void;
@@ -34,23 +35,24 @@ type GalaState = {
   loanPlayer: (playerId: string, amount: number) => void;
   firePlayer: (playerId: string) => void;
   undoTransaction: (transactionId: string) => void;
+  resetStarters: () => void;
+  undoReset: () => void;
   locate: (playerId: string) => Location;
 };
 
 function buildInitialStarters(): SlotAssignment {
   const slots = getFormation(DEFAULT_FORMATION).slots;
   const starters: SlotAssignment = {};
-  slots.forEach((slot, i) => {
-    starters[slot.id] = INITIAL_SQUAD[i]?.id ?? null;
+  slots.forEach((slot) => {
+    starters[slot.id] = null;
   });
   return starters;
 }
 
 function buildInitialBenchReserve() {
-  const slots = getFormation(DEFAULT_FORMATION).slots;
-  const rest = INITIAL_SQUAD.slice(slots.length).map((p) => p.id);
-  const bench = rest.slice(0, BENCH_LIMIT);
-  const reserve = rest.slice(BENCH_LIMIT);
+  const all = INITIAL_SQUAD.map((p) => p.id);
+  const bench = all.slice(0, BENCH_LIMIT);
+  const reserve = all.slice(BENCH_LIMIT);
   return { bench, reserve };
 }
 
@@ -98,6 +100,7 @@ export const useGalaStore = create<GalaState>()(
         prospects: PROSPECTS.map((p) => p.id),
         transactions: [],
         formationHistory: {},
+        preResetSnapshot: null,
 
         locate: (playerId) => {
           const s = get();
@@ -231,6 +234,33 @@ export const useGalaStore = create<GalaState>()(
           set({ starters, bench, reserve, prospects });
         },
 
+        resetStarters: () => {
+          const state = get();
+          const displaced = Object.values(state.starters).filter((v): v is string => !!v);
+          const bench = [...state.bench];
+          const reserve = [...state.reserve];
+          for (const pid of displaced) {
+            if (bench.length < BENCH_LIMIT) bench.push(pid);
+            else reserve.push(pid);
+          }
+          const starters: SlotAssignment = {};
+          Object.keys(state.starters).forEach((k) => (starters[k] = null));
+
+          set({
+            preResetSnapshot: { starters: state.starters, bench: state.bench, reserve: state.reserve },
+            starters,
+            bench,
+            reserve,
+          });
+        },
+
+        undoReset: () => {
+          const state = get();
+          if (!state.preResetSnapshot) return;
+          const { starters, bench, reserve } = state.preResetSnapshot;
+          set({ starters, bench, reserve, preResetSnapshot: null });
+        },
+
         undoTransaction: (transactionId) => {
           const state = get();
           const tx = state.transactions.find((t) => t.id === transactionId);
@@ -253,7 +283,7 @@ export const useGalaStore = create<GalaState>()(
         },
       };
     },
-    { name: "gala11-store" }
+    { name: "gala11-store-v2" }
   )
 );
 

@@ -8,13 +8,16 @@ export default function PlayerChip({
   player,
   size = "md",
   onClick,
+  draggable = true,
 }: {
   player: Player;
   size?: "sm" | "md" | "lg";
   onClick?: (e: React.MouseEvent) => void;
+  draggable?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
-    id: player.id,
+    id: draggable ? player.id : `static-${player.id}`,
+    disabled: !draggable,
   });
 
   const dims = {
@@ -33,8 +36,8 @@ export default function PlayerChip({
   return (
     <button
       ref={setNodeRef}
-      {...listeners}
-      {...attributes}
+      {...(draggable ? listeners : {})}
+      {...(draggable ? attributes : {})}
       onClick={onClick}
       style={style}
       className={`flex flex-col items-center gap-0.5 select-none touch-none ${

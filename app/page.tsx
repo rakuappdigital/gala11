@@ -11,6 +11,7 @@ import KasaPanel from "@/components/KasaPanel";
 import ActionMenu, { MenuAction } from "@/components/ActionMenu";
 import Modal from "@/components/Modal";
 import Report from "@/components/Report";
+import AmountInput, { AmountUnit, unitMultiplier } from "@/components/AmountInput";
 import { useGalaStore } from "@/lib/store";
 import { ALL_PLAYERS } from "@/lib/players-data";
 
@@ -38,12 +39,16 @@ export default function Home() {
     loanPlayer,
     firePlayer,
     undoTransaction,
+    preResetSnapshot,
+    resetStarters,
+    undoReset,
   } = useGalaStore();
 
   const [tab, setTab] = useState<Tab>("saha");
   const [menu, setMenu] = useState<MenuState>(null);
   const [dialog, setDialog] = useState<DialogState>(null);
   const [amountInput, setAmountInput] = useState("");
+  const [amountUnit, setAmountUnit] = useState<AmountUnit>("m");
   const [mounted, setMounted] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [downloading, setDownloading] = useState(false);
@@ -165,12 +170,30 @@ export default function Home() {
         <main className="max-w-6xl mx-auto px-4 py-6">
           {tab === "saha" ? (
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
-              <Pitch
-                formation={formation}
-                starters={starters}
-                onFormationChange={setFormation}
-                onPlayerClick={openPitchMenu}
-              />
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => resetStarters()}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold border bg-white/10 text-white border-white/20 hover:bg-white/20"
+                  >
+                    11&apos;i Sıfırla
+                  </button>
+                  {preResetSnapshot && (
+                    <button
+                      onClick={() => undoReset()}
+                      className="px-3 py-1.5 rounded-full text-xs font-semibold border bg-yellow-400 text-red-900 border-yellow-400 hover:bg-yellow-300"
+                    >
+                      Geri Al
+                    </button>
+                  )}
+                </div>
+                <Pitch
+                  formation={formation}
+                  starters={starters}
+                  onFormationChange={setFormation}
+                  onPlayerClick={openPitchMenu}
+                />
+              </div>
 
               <div className="flex flex-col gap-4">
                 <StartersMirrorList formation={formation} starters={starters} onPlayerClick={openListMenu} />
@@ -256,17 +279,14 @@ export default function Home() {
           >
             <p className="text-white/70 text-sm mb-3">
               {ALL_PLAYERS[dialog.playerId]?.name} için{" "}
-              {dialog.type === "sat" ? "bonservis bedeli" : "kiralık bedeli"} girin (€) — Kasa&apos;da
+              {dialog.type === "sat" ? "bonservis bedeli" : "kiralık bedeli"} girin — Kasa&apos;da
               gelir olarak işlenecek.
             </p>
-            <input
-              autoFocus
-              type="number"
-              min={0}
+            <AmountInput
               value={amountInput}
-              onChange={(e) => setAmountInput(e.target.value)}
-              placeholder="0"
-              className="w-full mb-5 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white outline-none focus:border-yellow-400"
+              unit={amountUnit}
+              onValueChange={setAmountInput}
+              onUnitChange={setAmountUnit}
             />
             <div className="flex gap-2 justify-end">
               <button
@@ -280,7 +300,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => {
-                  const amount = Number(amountInput) || 0;
+                  const amount = (Number(amountInput) || 0) * unitMultiplier(amountUnit);
                   if (dialog.type === "sat") sellPlayer(dialog.playerId, amount);
                   else loanPlayer(dialog.playerId, amount);
                   setDialog(null);
@@ -296,19 +316,16 @@ export default function Home() {
         )}
 
         {dialog?.kind === "buy" && (
-          <Modal title="Oyuncuyu Satın Al" onClose={() => setDialog(null)}>
+          <Modal title="Oyuncuyu Transfer Et" onClose={() => setDialog(null)}>
             <p className="text-white/70 text-sm mb-3">
-              {ALL_PLAYERS[dialog.playerId]?.name} için bonservis bedeli girin (€) — Kasa&apos;da gider
+              {ALL_PLAYERS[dialog.playerId]?.name} için bonservis bedeli girin — Kasa&apos;da gider
               olarak işlenecek.
             </p>
-            <input
-              autoFocus
-              type="number"
-              min={0}
+            <AmountInput
               value={amountInput}
-              onChange={(e) => setAmountInput(e.target.value)}
-              placeholder="0"
-              className="w-full mb-5 px-3 py-2 rounded-lg bg-white/10 border border-white/20 text-white outline-none focus:border-yellow-400"
+              unit={amountUnit}
+              onValueChange={setAmountInput}
+              onUnitChange={setAmountUnit}
             />
             <div className="flex gap-2 justify-end">
               <button
@@ -322,7 +339,7 @@ export default function Home() {
               </button>
               <button
                 onClick={() => {
-                  const amount = Number(amountInput) || 0;
+                  const amount = (Number(amountInput) || 0) * unitMultiplier(amountUnit);
                   buyProspect(dialog.playerId, amount);
                   setDialog(null);
                   setAmountInput("");
