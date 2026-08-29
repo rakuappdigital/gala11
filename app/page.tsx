@@ -8,11 +8,12 @@ import ListSection from "@/components/ListSection";
 import StartersMirrorList from "@/components/StartersMirrorList";
 import ProspectsSection from "@/components/ProspectsSection";
 import KasaPanel from "@/components/KasaPanel";
+import FiredPlayersList from "@/components/FiredPlayersList";
 import ActionMenu, { MenuAction } from "@/components/ActionMenu";
 import Modal from "@/components/Modal";
 import Report from "@/components/Report";
 import AmountInput, { AmountUnit, unitMultiplier } from "@/components/AmountInput";
-import { useGalaStore } from "@/lib/store";
+import { useGalaStore, BoardKey } from "@/lib/store";
 import { ALL_PLAYERS } from "@/lib/players-data";
 
 type Tab = "saha" | "transfer";
@@ -24,14 +25,17 @@ type DialogState =
   | { kind: "buy"; playerId: string }
   | null;
 
+const BOARD_LABELS: Record<BoardKey, string> = { as: "As Kadro", yedek: "Yedek Kadro" };
+
 export default function Home() {
   const {
-    formation,
-    starters,
-    bench,
-    reserve,
+    squadIds,
     prospects,
+    boards,
+    activeBoard,
+    resetSnapshots,
     transactions,
+    setActiveBoard,
     setFormation,
     movePlayer,
     buyProspect,
@@ -39,9 +43,9 @@ export default function Home() {
     loanPlayer,
     firePlayer,
     undoTransaction,
-    preResetSnapshot,
     resetStarters,
     undoReset,
+    autoFillTeam,
   } = useGalaStore();
 
   const [tab, setTab] = useState<Tab>("saha");
@@ -59,6 +63,16 @@ export default function Home() {
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } })
   );
+
+  const board = boards[activeBoard];
+  const formation = board.formation;
+  const starters = board.starters;
+  const bench = board.bench;
+  const starterIds = Object.values(starters).filter(Boolean) as string[];
+  const reserve = squadIds.filter((id) => !starterIds.includes(id) && !bench.includes(id));
+  const preResetSnapshot = resetSnapshots[activeBoard];
+
+  const yedekHasContent = Object.values(boards.yedek.starters).some(Boolean);
 
   function openPitchMenu(playerId: string, e: React.MouseEvent) {
     e.stopPropagation();
@@ -172,6 +186,28 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-[1fr_320px] gap-6">
               <div className="flex flex-col gap-3">
                 <div className="flex gap-2">
+                  {(["as", "yedek"] as BoardKey[]).map((key) => (
+                    <button
+                      key={key}
+                      onClick={() => setActiveBoard(key)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold border transition ${
+                        activeBoard === key
+                          ? "bg-yellow-400 text-red-900 border-yellow-400"
+                          : "bg-white/10 text-white border-white/20 hover:bg-white/20"
+                      }`}
+                    >
+                      {BOARD_LABELS[key]}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => autoFillTeam()}
+                    className="px-3 py-1.5 rounded-full text-xs font-semibold border bg-white/10 text-white border-white/20 hover:bg-white/20"
+                  >
+                    Otomatik Takım Kur
+                  </button>
                   <button
                     onClick={() => resetStarters()}
                     className="px-3 py-1.5 rounded-full text-xs font-semibold border bg-white/10 text-white border-white/20 hover:bg-white/20"
@@ -203,10 +239,13 @@ export default function Home() {
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-              <ProspectsSection
-                playerIds={prospects}
-                onBuyClick={(playerId) => setDialog({ kind: "buy", playerId })}
-              />
+              <div className="flex flex-col gap-6">
+                <ProspectsSection
+                  playerIds={prospects}
+                  onBuyClick={(playerId) => setDialog({ kind: "buy", playerId })}
+                />
+                <FiredPlayersList transactions={transactions} onUndo={undoTransaction} />
+              </div>
               <KasaPanel transactions={transactions} onUndo={undoTransaction} />
             </div>
           )}
@@ -249,8 +288,8 @@ export default function Home() {
         {dialog?.kind === "fireConfirm" && (
           <Modal title="Oyuncuyu Kov" onClose={() => setDialog(null)}>
             <p className="text-white/70 text-sm mb-5">
-              {ALL_PLAYERS[dialog.playerId]?.name} kadrodan tamamen çıkarılsın mı? Bu işlem için bonservis
-              alınmaz ve geri alınamaz.
+              {ALL_PLAYERS[dialog.playerId]?.name} kadrodan tamamen çıkarılsın mı? Kovulanlar
+              listesinde 0 € bonservisle kayıt altına alınır, dilersen geri alabilirsin.
             </p>
             <div className="flex gap-2 justify-end">
               <button
@@ -263,6 +302,7 @@ export default function Home() {
                 onClick={() => {
                   firePlayer(dialog.playerId);
                   setDialog(null);
+                  setTab("transfer");
                 }}
                 className="px-4 py-2 rounded-lg text-sm bg-red-500 text-white font-semibold hover:bg-red-400"
               >
@@ -362,9 +402,8 @@ export default function Home() {
                 <div style={{ transform: "scale(0.7)", transformOrigin: "top left", width: 1200 * 0.7 }}>
                   <Report
                     ref={reportRef}
-                    formation={formation}
-                    starters={starters}
-                    bench={bench}
+                    asBoard={boards.as}
+                    yedekBoard={yedekHasContent ? boards.yedek : undefined}
                     transactions={transactions}
                   />
                 </div>

@@ -12,16 +12,18 @@ const TYPE_LABELS: Record<Transaction["type"], string> = {
   sat: "Satış",
   kirala: "Kiralık",
   "satin-al": "Transfer",
+  kov: "Kovuldu",
 };
 
 export default function KasaPanel({
-  transactions,
+  transactions: allTransactions,
   onUndo,
 }: {
   transactions: Transaction[];
   onUndo: (id: string) => void;
 }) {
   const [open, setOpen] = useState(true);
+  const transactions = allTransactions.filter((t) => t.type !== "kov");
 
   const gelir = transactions
     .filter((t) => transactionDirection(t.type) === "gelir")

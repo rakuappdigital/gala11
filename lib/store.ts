@@ -2,9 +2,19 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { INITIAL_SQUAD, PROSPECTS } from "./players-data";
 import { DEFAULT_FORMATION, getFormation } from "./formations";
+import { AUTO_BENCH, AUTO_FORMATION_NAME, AUTO_STARTERS } from "./auto-team";
 import type { SlotAssignment, Transaction, TransactionType } from "./types";
 
 const BENCH_LIMIT = 7;
+
+export type BoardKey = "as" | "yedek";
+
+type BoardState = {
+  formation: string;
+  starters: SlotAssignment;
+  bench: string[];
+  formationHistory: Record<string, SlotAssignment>;
+};
 
 type Destination =
   | { type: "slot"; slotId: string }
@@ -14,20 +24,19 @@ type Destination =
 type Location =
   | { where: "slot"; slotId: string }
   | { where: "bench"; index: number }
-  | { where: "reserve"; index: number }
+  | { where: "reserve" }
   | { where: "prospects"; index: number }
   | { where: "none" };
 
 type GalaState = {
-  formation: string;
-  starters: SlotAssignment;
-  bench: string[];
-  reserve: string[];
+  squadIds: string[];
   prospects: string[];
+  boards: Record<BoardKey, BoardState>;
+  activeBoard: BoardKey;
+  resetSnapshots: Record<BoardKey, { starters: SlotAssignment; bench: string[] } | null>;
   transactions: Transaction[];
-  formationHistory: Record<string, SlotAssignment>;
-  preResetSnapshot: { starters: SlotAssignment; bench: string[]; reserve: string[] } | null;
 
+  setActiveBoard: (board: BoardKey) => void;
   setFormation: (name: string) => void;
   movePlayer: (playerId: string, dest: Destination) => void;
   buyProspect: (playerId: string, amount: number) => void;
@@ -37,253 +46,255 @@ type GalaState = {
   undoTransaction: (transactionId: string) => void;
   resetStarters: () => void;
   undoReset: () => void;
+  autoFillTeam: () => void;
   locate: (playerId: string) => Location;
 };
 
-function buildInitialStarters(): SlotAssignment {
-  const slots = getFormation(DEFAULT_FORMATION).slots;
+function emptyBoard(formationName: string): BoardState {
   const starters: SlotAssignment = {};
-  slots.forEach((slot) => {
-    starters[slot.id] = null;
-  });
-  return starters;
+  getFormation(formationName).slots.forEach((slot) => (starters[slot.id] = null));
+  return { formation: formationName, starters, bench: [], formationHistory: {} };
 }
 
-function buildInitialBenchReserve() {
-  const all = INITIAL_SQUAD.map((p) => p.id);
-  const bench = all.slice(0, BENCH_LIMIT);
-  const reserve = all.slice(BENCH_LIMIT);
-  return { bench, reserve };
+function cloneBoard(board: BoardState): BoardState {
+  return {
+    formation: board.formation,
+    starters: { ...board.starters },
+    bench: [...board.bench],
+    formationHistory: board.formationHistory,
+  };
 }
 
-function locateIn(
-  playerId: string,
-  starters: SlotAssignment,
-  bench: string[],
-  reserve: string[],
-  prospects: string[]
-): Location {
-  for (const slotId of Object.keys(starters)) {
-    if (starters[slotId] === playerId) return { where: "slot", slotId };
+function locateInBoard(playerId: string, board: BoardState, squadIds: string[], prospects: string[]): Location {
+  for (const slotId of Object.keys(board.starters)) {
+    if (board.starters[slotId] === playerId) return { where: "slot", slotId };
   }
-  const bi = bench.indexOf(playerId);
+  const bi = board.bench.indexOf(playerId);
   if (bi !== -1) return { where: "bench", index: bi };
-  const ri = reserve.indexOf(playerId);
-  if (ri !== -1) return { where: "reserve", index: ri };
+  if (squadIds.includes(playerId)) return { where: "reserve" };
   const pi = prospects.indexOf(playerId);
   if (pi !== -1) return { where: "prospects", index: pi };
   return { where: "none" };
 }
 
-function removeFromLocation(
-  loc: Location,
-  starters: SlotAssignment,
-  bench: string[],
-  reserve: string[],
-  prospects: string[]
-) {
-  if (loc.where === "slot") starters[loc.slotId] = null;
-  if (loc.where === "bench") bench.splice(loc.index, 1);
-  if (loc.where === "reserve") reserve.splice(loc.index, 1);
+function removeFromBoardLocation(loc: Location, board: BoardState, prospects: string[]) {
+  if (loc.where === "slot") board.starters[loc.slotId] = null;
+  if (loc.where === "bench") board.bench.splice(loc.index, 1);
   if (loc.where === "prospects") prospects.splice(loc.index, 1);
+}
+
+function removeFromEverywhere(boards: Record<BoardKey, BoardState>, squadIds: string[], playerId: string) {
+  const nextBoards: Record<BoardKey, BoardState> = {
+    as: cloneBoard(boards.as),
+    yedek: cloneBoard(boards.yedek),
+  };
+  (Object.keys(nextBoards) as BoardKey[]).forEach((key) => {
+    const b = nextBoards[key];
+    Object.keys(b.starters).forEach((slotId) => {
+      if (b.starters[slotId] === playerId) b.starters[slotId] = null;
+    });
+    b.bench = b.bench.filter((id) => id !== playerId);
+  });
+  return { boards: nextBoards, squadIds: squadIds.filter((id) => id !== playerId) };
 }
 
 export const useGalaStore = create<GalaState>()(
   persist(
-    (set, get) => {
-      const { bench, reserve } = buildInitialBenchReserve();
-      return {
-        formation: DEFAULT_FORMATION,
-        starters: buildInitialStarters(),
-        bench,
-        reserve,
-        prospects: PROSPECTS.map((p) => p.id),
-        transactions: [],
-        formationHistory: {},
-        preResetSnapshot: null,
+    (set, get) => ({
+      squadIds: INITIAL_SQUAD.map((p) => p.id),
+      prospects: PROSPECTS.map((p) => p.id),
+      boards: {
+        as: emptyBoard(DEFAULT_FORMATION),
+        yedek: emptyBoard(DEFAULT_FORMATION),
+      },
+      activeBoard: "as",
+      resetSnapshots: { as: null, yedek: null },
+      transactions: [],
 
-        locate: (playerId) => {
-          const s = get();
-          return locateIn(playerId, s.starters, s.bench, s.reserve, s.prospects);
-        },
+      locate: (playerId) => {
+        const s = get();
+        return locateInBoard(playerId, s.boards[s.activeBoard], s.squadIds, s.prospects);
+      },
 
-        setFormation: (name) => {
-          const state = get();
-          if (name === state.formation) return;
-          const oldFormation = getFormation(state.formation);
-          const newFormation = getFormation(name);
+      setActiveBoard: (board) => set({ activeBoard: board }),
 
-          const history = { ...state.formationHistory, [state.formation]: { ...state.starters } };
+      setFormation: (name) => {
+        const state = get();
+        const key = state.activeBoard;
+        const current = state.boards[key];
+        if (name === current.formation) return;
 
-          const squadPool = new Set([
-            ...Object.values(state.starters).filter(Boolean),
-            ...state.bench,
-            ...state.reserve,
-          ] as string[]);
+        const oldFormation = getFormation(current.formation);
+        const newFormation = getFormation(name);
+        const history = { ...current.formationHistory, [current.formation]: { ...current.starters } };
 
-          const cachedTarget = history[name];
-          const cachedValid =
-            cachedTarget &&
-            Object.values(cachedTarget).every((pid) => !pid || squadPool.has(pid));
+        const squadPool = new Set([
+          ...Object.values(current.starters).filter(Boolean),
+          ...current.bench,
+        ] as string[]);
 
-          let newStarters: SlotAssignment;
+        const cachedTarget = history[name];
+        const cachedValid =
+          cachedTarget && Object.values(cachedTarget).every((pid) => !pid || squadPool.has(pid));
 
-          if (cachedValid) {
-            newStarters = { ...cachedTarget };
-          } else {
-            newStarters = {};
-            newFormation.slots.forEach((slot) => (newStarters[slot.id] = null));
+        let newStarters: SlotAssignment;
 
-            const currentPlayers = oldFormation.slots
-              .map((slot) => ({ slot, playerId: state.starters[slot.id] }))
-              .filter((e): e is { slot: typeof oldFormation.slots[number]; playerId: string } => !!e.playerId);
+        if (cachedValid) {
+          newStarters = { ...cachedTarget };
+        } else {
+          newStarters = {};
+          newFormation.slots.forEach((slot) => (newStarters[slot.id] = null));
 
-            const availableSlots = [...newFormation.slots];
-            for (const entry of currentPlayers) {
-              if (availableSlots.length === 0) break;
-              let bestIdx = 0;
-              let bestDist = Infinity;
-              availableSlots.forEach((slot, idx) => {
-                const dist = (slot.x - entry.slot.x) ** 2 + (slot.y - entry.slot.y) ** 2;
-                if (dist < bestDist) {
-                  bestDist = dist;
-                  bestIdx = idx;
-                }
-              });
-              const chosen = availableSlots.splice(bestIdx, 1)[0];
-              newStarters[chosen.id] = entry.playerId;
-            }
-          }
+          const currentPlayers = oldFormation.slots
+            .map((slot) => ({ slot, playerId: current.starters[slot.id] }))
+            .filter((e): e is { slot: typeof oldFormation.slots[number]; playerId: string } => !!e.playerId);
 
-          set({ formation: name, starters: newStarters, formationHistory: history });
-        },
-
-        movePlayer: (playerId, dest) => {
-          const state = get();
-          const starters = { ...state.starters };
-          const bench = [...state.bench];
-          const reserve = [...state.reserve];
-          const prospects = [...state.prospects];
-
-          const loc = locateIn(playerId, starters, bench, reserve, prospects);
-          if (loc.where === "none") return;
-
-          removeFromLocation(loc, starters, bench, reserve, prospects);
-
-          if (dest.type === "slot") {
-            const occupant = starters[dest.slotId];
-            if (occupant && occupant !== playerId) {
-              if (loc.where === "slot") {
-                starters[loc.slotId] = occupant;
-              } else if (bench.length < BENCH_LIMIT) {
-                bench.push(occupant);
-              } else {
-                reserve.push(occupant);
+          const availableSlots = [...newFormation.slots];
+          for (const entry of currentPlayers) {
+            if (availableSlots.length === 0) break;
+            let bestIdx = 0;
+            let bestDist = Infinity;
+            availableSlots.forEach((slot, idx) => {
+              const dist = (slot.x - entry.slot.x) ** 2 + (slot.y - entry.slot.y) ** 2;
+              if (dist < bestDist) {
+                bestDist = dist;
+                bestIdx = idx;
               }
+            });
+            const chosen = availableSlots.splice(bestIdx, 1)[0];
+            newStarters[chosen.id] = entry.playerId;
+          }
+        }
+
+        set({
+          boards: {
+            ...state.boards,
+            [key]: { ...current, formation: name, starters: newStarters, formationHistory: history },
+          },
+        });
+      },
+
+      movePlayer: (playerId, dest) => {
+        const state = get();
+        const key = state.activeBoard;
+        const board = cloneBoard(state.boards[key]);
+        const prospects = [...state.prospects];
+
+        const loc = locateInBoard(playerId, board, state.squadIds, prospects);
+        if (loc.where === "none") return;
+
+        removeFromBoardLocation(loc, board, prospects);
+
+        if (dest.type === "slot") {
+          const occupant = board.starters[dest.slotId];
+          if (occupant && occupant !== playerId) {
+            if (loc.where === "slot") {
+              board.starters[loc.slotId] = occupant;
+            } else if (board.bench.length < BENCH_LIMIT) {
+              board.bench.push(occupant);
             }
-            starters[dest.slotId] = playerId;
-          } else if (dest.type === "bench") {
-            if (bench.length < BENCH_LIMIT) {
-              bench.push(playerId);
-            } else {
-              reserve.push(playerId);
-            }
-          } else {
-            reserve.push(playerId);
           }
+          board.starters[dest.slotId] = playerId;
+        } else if (dest.type === "bench") {
+          if (board.bench.length < BENCH_LIMIT) board.bench.push(playerId);
+        }
 
-          set({ starters, bench, reserve, prospects });
-        },
+        set({ boards: { ...state.boards, [key]: board }, prospects });
+      },
 
-        buyProspect: (playerId, amount) => {
-          const state = get();
-          const prospects = state.prospects.filter((id) => id !== playerId);
-          const reserve = [...state.reserve, playerId];
+      buyProspect: (playerId, amount) => {
+        const state = get();
+        const prospects = state.prospects.filter((id) => id !== playerId);
+        const squadIds = [...state.squadIds, playerId];
 
-          const player = INITIAL_SQUAD.find((p) => p.id === playerId) ?? PROSPECTS.find((p) => p.id === playerId);
-          const transaction: Transaction = {
-            id: `${playerId}-${Date.now()}`,
-            playerId,
-            playerName: player?.name ?? playerId,
-            playerImg: player?.img ?? "",
-            type: "satin-al",
-            amount,
-            createdAt: Date.now(),
-          };
+        const player = INITIAL_SQUAD.find((p) => p.id === playerId) ?? PROSPECTS.find((p) => p.id === playerId);
+        const transaction: Transaction = {
+          id: `${playerId}-${Date.now()}`,
+          playerId,
+          playerName: player?.name ?? playerId,
+          playerImg: player?.img ?? "",
+          type: "satin-al",
+          amount,
+          createdAt: Date.now(),
+        };
 
-          set({ prospects, reserve, transactions: [transaction, ...state.transactions] });
-        },
+        set({ prospects, squadIds, transactions: [transaction, ...state.transactions] });
+      },
 
-        sellPlayer: (playerId, amount) => {
-          releasePlayer(get, set, playerId, "sat", amount);
-        },
+      sellPlayer: (playerId, amount) => releasePlayer(get, set, playerId, "sat", amount),
+      loanPlayer: (playerId, amount) => releasePlayer(get, set, playerId, "kirala", amount),
+      firePlayer: (playerId) => releasePlayer(get, set, playerId, "kov", 0),
 
-        loanPlayer: (playerId, amount) => {
-          releasePlayer(get, set, playerId, "kirala", amount);
-        },
+      resetStarters: () => {
+        const state = get();
+        const key = state.activeBoard;
+        const board = state.boards[key];
+        const displaced = Object.values(board.starters).filter((v): v is string => !!v);
+        const bench = [...board.bench];
+        for (const pid of displaced) {
+          if (bench.length < BENCH_LIMIT) bench.push(pid);
+        }
+        const starters: SlotAssignment = {};
+        Object.keys(board.starters).forEach((k) => (starters[k] = null));
 
-        firePlayer: (playerId) => {
-          const state = get();
-          const starters = { ...state.starters };
-          const bench = [...state.bench];
-          const reserve = [...state.reserve];
-          const prospects = [...state.prospects];
-          const loc = locateIn(playerId, starters, bench, reserve, prospects);
-          if (loc.where === "none") return;
-          removeFromLocation(loc, starters, bench, reserve, prospects);
-          set({ starters, bench, reserve, prospects });
-        },
+        set({
+          resetSnapshots: {
+            ...state.resetSnapshots,
+            [key]: { starters: board.starters, bench: board.bench },
+          },
+          boards: { ...state.boards, [key]: { ...board, starters, bench } },
+        });
+      },
 
-        resetStarters: () => {
-          const state = get();
-          const displaced = Object.values(state.starters).filter((v): v is string => !!v);
-          const bench = [...state.bench];
-          const reserve = [...state.reserve];
-          for (const pid of displaced) {
-            if (bench.length < BENCH_LIMIT) bench.push(pid);
-            else reserve.push(pid);
-          }
-          const starters: SlotAssignment = {};
-          Object.keys(state.starters).forEach((k) => (starters[k] = null));
+      undoReset: () => {
+        const state = get();
+        const key = state.activeBoard;
+        const snap = state.resetSnapshots[key];
+        if (!snap) return;
+        set({
+          boards: { ...state.boards, [key]: { ...state.boards[key], starters: snap.starters, bench: snap.bench } },
+          resetSnapshots: { ...state.resetSnapshots, [key]: null },
+        });
+      },
 
-          set({
-            preResetSnapshot: { starters: state.starters, bench: state.bench, reserve: state.reserve },
-            starters,
-            bench,
-            reserve,
-          });
-        },
+      autoFillTeam: () => {
+        const state = get();
+        const starters: SlotAssignment = {};
+        getFormation(AUTO_FORMATION_NAME).slots.forEach((slot) => (starters[slot.id] = null));
+        Object.entries(AUTO_STARTERS).forEach(([slotId, playerId]) => {
+          starters[slotId] = playerId;
+        });
 
-        undoReset: () => {
-          const state = get();
-          if (!state.preResetSnapshot) return;
-          const { starters, bench, reserve } = state.preResetSnapshot;
-          set({ starters, bench, reserve, preResetSnapshot: null });
-        },
+        const boardAs: BoardState = {
+          formation: AUTO_FORMATION_NAME,
+          starters,
+          bench: [...AUTO_BENCH],
+          formationHistory: {
+            ...state.boards.as.formationHistory,
+            [AUTO_FORMATION_NAME]: { ...starters },
+          },
+        };
 
-        undoTransaction: (transactionId) => {
-          const state = get();
-          const tx = state.transactions.find((t) => t.id === transactionId);
-          if (!tx) return;
-          const transactions = state.transactions.filter((t) => t.id !== transactionId);
+        set({ boards: { ...state.boards, as: boardAs }, activeBoard: "as" });
+      },
 
-          if (tx.type === "satin-al") {
-            const starters = { ...state.starters };
-            const bench = [...state.bench];
-            const reserve = [...state.reserve];
-            const prospects = [...state.prospects];
-            const loc = locateIn(tx.playerId, starters, bench, reserve, prospects);
-            if (loc.where !== "none") removeFromLocation(loc, starters, bench, reserve, prospects);
-            prospects.push(tx.playerId);
-            set({ transactions, starters, bench, reserve, prospects });
-          } else {
-            const reserve = [...state.reserve, tx.playerId];
-            set({ transactions, reserve });
-          }
-        },
-      };
-    },
-    { name: "gala11-store-v2" }
+      undoTransaction: (transactionId) => {
+        const state = get();
+        const tx = state.transactions.find((t) => t.id === transactionId);
+        if (!tx) return;
+        const transactions = state.transactions.filter((t) => t.id !== transactionId);
+
+        if (tx.type === "satin-al") {
+          const { boards, squadIds } = removeFromEverywhere(state.boards, state.squadIds, tx.playerId);
+          const prospects = [...state.prospects, tx.playerId];
+          set({ transactions, boards, squadIds, prospects });
+        } else {
+          const squadIds = [...state.squadIds, tx.playerId];
+          set({ transactions, squadIds });
+        }
+      },
+    }),
+    { name: "gala11-store-v3" }
   )
 );
 
@@ -295,13 +306,10 @@ function releasePlayer(
   amount: number
 ) {
   const state = get();
-  const starters = { ...state.starters };
-  const bench = [...state.bench];
-  const reserve = [...state.reserve];
-  const prospects = [...state.prospects];
-  const loc = locateIn(playerId, starters, bench, reserve, prospects);
+  const loc = locateInBoard(playerId, state.boards[state.activeBoard], state.squadIds, state.prospects);
   if (loc.where === "none") return;
-  removeFromLocation(loc, starters, bench, reserve, prospects);
+
+  const { boards, squadIds } = removeFromEverywhere(state.boards, state.squadIds, playerId);
 
   const player = INITIAL_SQUAD.find((p) => p.id === playerId) ?? PROSPECTS.find((p) => p.id === playerId);
   const transaction: Transaction = {
@@ -315,10 +323,8 @@ function releasePlayer(
   };
 
   set({
-    starters,
-    bench,
-    reserve,
-    prospects,
+    boards,
+    squadIds,
     transactions: [transaction, ...state.transactions],
   });
 }

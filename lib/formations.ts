@@ -203,6 +203,22 @@ export const FORMATIONS: Formation[] = [
       { id: "rst", x: 62, y: 14 },
     ],
   },
+  {
+    name: "Otomatik",
+    slots: [
+      { id: "gk", x: 50, y: 92 },
+      { id: "lcb", x: 35, y: 80 },
+      { id: "rcb", x: 65, y: 80 },
+      { id: "rb", x: 88, y: 70 },
+      { id: "ldm", x: 38, y: 62 },
+      { id: "rdm", x: 62, y: 62 },
+      { id: "lcm", x: 30, y: 42 },
+      { id: "rcm", x: 70, y: 42 },
+      { id: "lw", x: 15, y: 16 },
+      { id: "rw", x: 85, y: 16 },
+      { id: "st", x: 50, y: 10 },
+    ],
+  },
 ];
 
 export const DEFAULT_FORMATION = FORMATIONS[0].name;

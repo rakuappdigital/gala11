@@ -4,7 +4,7 @@ export type Player = {
   img: string;
 };
 
-export type TransactionType = "sat" | "kirala" | "satin-al";
+export type TransactionType = "sat" | "kirala" | "satin-al" | "kov";
 
 export type Transaction = {
   id: string;
