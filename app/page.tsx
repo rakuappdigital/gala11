@@ -108,6 +108,19 @@ export default function Home() {
     }
   }
 
+  // Very tall reports (two boards + finance section) can exceed the safe
+  // canvas size some mobile browsers support at pixelRatio 2, which silently
+  // downscales/blurs the output. Clamp pixelRatio so the longer side and
+  // total area stay within a size every browser can rasterize cleanly.
+  function computeSafePixelRatio(width: number, height: number) {
+    const MAX_DIMENSION = 4000;
+    const MAX_AREA = 11_000_000;
+    let ratio = 2;
+    ratio = Math.min(ratio, MAX_DIMENSION / Math.max(width, height));
+    ratio = Math.min(ratio, Math.sqrt(MAX_AREA / (width * height)));
+    return Math.max(1, ratio);
+  }
+
   async function waitForImages(container: HTMLElement) {
     const imgs = Array.from(container.querySelectorAll("img"));
     await Promise.all(
@@ -126,7 +139,8 @@ export default function Home() {
     setDownloading(true);
     try {
       await waitForImages(reportRef.current);
-      const dataUrl = await toPng(reportRef.current, { pixelRatio: 2, cacheBust: true });
+      const pixelRatio = computeSafePixelRatio(reportRef.current.offsetWidth, reportRef.current.offsetHeight);
+      const dataUrl = await toPng(reportRef.current, { pixelRatio, cacheBust: true });
       const link = document.createElement("a");
       link.download = `gala11-rapor-${Date.now()}.png`;
       link.href = dataUrl;
@@ -141,7 +155,8 @@ export default function Home() {
     setDownloading(true);
     try {
       await waitForImages(reportRef.current);
-      const dataUrl = await toPng(reportRef.current, { pixelRatio: 2, cacheBust: true });
+      const pixelRatio = computeSafePixelRatio(reportRef.current.offsetWidth, reportRef.current.offsetHeight);
+      const dataUrl = await toPng(reportRef.current, { pixelRatio, cacheBust: true });
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `gala11-rapor-${Date.now()}.png`, { type: "image/png" });
 

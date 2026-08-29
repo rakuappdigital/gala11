@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useLayoutEffect, useRef } from "react";
 
 export type MenuAction = {
   label: string;
@@ -28,6 +28,27 @@ export default function ActionMenu({
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
   }, [onClose]);
+
+  // Keep the menu fully inside the viewport — flips left/up when the click
+  // happens near the right or bottom edge (common on mobile).
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const margin = 8;
+    const rect = el.getBoundingClientRect();
+    let left = x;
+    let top = y;
+    if (left + rect.width > window.innerWidth - margin) {
+      left = window.innerWidth - rect.width - margin;
+    }
+    if (left < margin) left = margin;
+    if (top + rect.height > window.innerHeight - margin) {
+      top = window.innerHeight - rect.height - margin;
+    }
+    if (top < margin) top = margin;
+    el.style.left = `${left}px`;
+    el.style.top = `${top}px`;
+  }, [x, y]);
 
   return (
     <div

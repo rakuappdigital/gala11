@@ -38,6 +38,7 @@ function PitchSlot({
       >
         {player ? (
           <PlayerChip
+            key={player.id}
             player={player}
             size="md"
             onClick={(e) => onPlayerClick(player.id, e)}
