@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<Transaction["type"], string> = {
   sat: "Satış",
   kirala: "Kiralık",
   "satin-al": "Transfer",
+  "kirala-al": "Kiralık (Alım)",
   kov: "Kovuldu",
 };
 

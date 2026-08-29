@@ -13,12 +13,14 @@ function PitchSlot({
   y,
   playerId,
   onPlayerClick,
+  loanedIds,
 }: {
   slotId: string;
   x: number;
   y: number;
   playerId: string | null;
   onPlayerClick: (playerId: string, e: React.MouseEvent) => void;
+  loanedIds: string[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id: `slot-${slotId}` });
   const player = playerId ? ALL_PLAYERS[playerId] : null;
@@ -39,6 +41,7 @@ function PitchSlot({
             player={player}
             size="md"
             onClick={(e) => onPlayerClick(player.id, e)}
+            onLoan={loanedIds.includes(player.id)}
           />
         ) : (
           <div className="w-[52px] h-[52px] rounded-full border-2 border-dashed border-white/40 bg-white/5" />
@@ -53,11 +56,13 @@ export default function Pitch({
   starters,
   onFormationChange,
   onPlayerClick,
+  loanedIds = [],
 }: {
   formation: string;
   starters: SlotAssignment;
   onFormationChange: (name: string) => void;
   onPlayerClick: (playerId: string, e: React.MouseEvent) => void;
+  loanedIds?: string[];
 }) {
   const slots = getFormation(formation).slots;
   const [half, setHalf] = useState(false);
@@ -131,6 +136,7 @@ export default function Pitch({
             y={slot.y}
             playerId={starters[slot.id] ?? null}
             onPlayerClick={onPlayerClick}
+            loanedIds={loanedIds}
           />
         ))}
       </div>

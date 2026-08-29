@@ -9,10 +9,12 @@ export default function StartersMirrorList({
   formation,
   starters,
   onPlayerClick,
+  loanedIds = [],
 }: {
   formation: string;
   starters: SlotAssignment;
   onPlayerClick: (playerId: string, e: React.MouseEvent) => void;
+  loanedIds?: string[];
 }) {
   const slots = getFormation(formation).slots;
   const filled = slots.filter((s) => starters[s.id]);
@@ -37,6 +39,7 @@ export default function StartersMirrorList({
                 size="sm"
                 draggable={false}
                 onClick={(e) => onPlayerClick(player.id, e)}
+                onLoan={loanedIds.includes(player.id)}
               />
             );
           })}

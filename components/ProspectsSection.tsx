@@ -6,10 +6,10 @@ import { PROSPECT_ROLES, ROLE_LABELS } from "@/lib/player-roles";
 
 export default function ProspectsSection({
   playerIds,
-  onBuyClick,
+  onPlayerClick,
 }: {
   playerIds: string[];
-  onBuyClick: (playerId: string) => void;
+  onPlayerClick: (playerId: string, e: React.MouseEvent) => void;
 }) {
   return (
     <div className="rounded-lg border border-white/15 bg-white/5 p-3">
@@ -25,7 +25,11 @@ export default function ProspectsSection({
             const player = ALL_PLAYERS[id];
             if (!player) return null;
             return (
-              <div key={id} className="flex flex-col items-center gap-1">
+              <button
+                key={id}
+                onClick={(e) => onPlayerClick(id, e)}
+                className="flex flex-col items-center gap-1"
+              >
                 <div className="w-12 h-12 rounded-full overflow-hidden border-2 border-white/30 bg-red-900">
                   <Image
                     src={player.img}
@@ -35,19 +39,13 @@ export default function ProspectsSection({
                     className="w-full h-full object-cover"
                   />
                 </div>
-                <span className="text-[10px] text-white/80 max-w-[64px] truncate">{player.name}</span>
+                <span className="text-[10px] text-white/80 max-w-[70px] truncate">{player.name}</span>
                 {ROLE_LABELS[PROSPECT_ROLES[id]] && (
                   <span className="text-[9px] text-yellow-400/80 max-w-[70px] text-center leading-tight">
                     {ROLE_LABELS[PROSPECT_ROLES[id]]}
                   </span>
                 )}
-                <button
-                  onClick={() => onBuyClick(id)}
-                  className="text-[10px] px-2 py-0.5 rounded bg-yellow-400 text-red-900 font-semibold hover:bg-yellow-300"
-                >
-                  Transfer Et
-                </button>
-              </div>
+              </button>
             );
           })}
         </div>

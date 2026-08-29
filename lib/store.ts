@@ -31,6 +31,7 @@ type Location =
 type GalaState = {
   squadIds: string[];
   prospects: string[];
+  loanedIds: string[];
   boards: Record<BoardKey, BoardState>;
   activeBoard: BoardKey;
   resetSnapshots: Record<BoardKey, { starters: SlotAssignment; bench: string[] } | null>;
@@ -40,6 +41,7 @@ type GalaState = {
   setFormation: (name: string) => void;
   movePlayer: (playerId: string, dest: Destination) => void;
   buyProspect: (playerId: string, amount: number) => void;
+  loanProspectIn: (playerId: string, amount: number) => void;
   sellPlayer: (playerId: string, amount: number) => void;
   loanPlayer: (playerId: string, amount: number) => void;
   firePlayer: (playerId: string) => void;
@@ -103,6 +105,7 @@ export const useGalaStore = create<GalaState>()(
     (set, get) => ({
       squadIds: INITIAL_SQUAD.map((p) => p.id),
       prospects: PROSPECTS.map((p) => p.id),
+      loanedIds: [],
       boards: {
         as: emptyBoard(DEFAULT_FORMATION),
         yedek: emptyBoard(DEFAULT_FORMATION),
@@ -221,6 +224,26 @@ export const useGalaStore = create<GalaState>()(
         set({ prospects, squadIds, transactions: [transaction, ...state.transactions] });
       },
 
+      loanProspectIn: (playerId, amount) => {
+        const state = get();
+        const prospects = state.prospects.filter((id) => id !== playerId);
+        const squadIds = [...state.squadIds, playerId];
+        const loanedIds = [...state.loanedIds, playerId];
+
+        const player = INITIAL_SQUAD.find((p) => p.id === playerId) ?? PROSPECTS.find((p) => p.id === playerId);
+        const transaction: Transaction = {
+          id: `${playerId}-${Date.now()}`,
+          playerId,
+          playerName: player?.name ?? playerId,
+          playerImg: player?.img ?? "",
+          type: "kirala-al",
+          amount,
+          createdAt: Date.now(),
+        };
+
+        set({ prospects, squadIds, loanedIds, transactions: [transaction, ...state.transactions] });
+      },
+
       sellPlayer: (playerId, amount) => releasePlayer(get, set, playerId, "sat", amount),
       loanPlayer: (playerId, amount) => releasePlayer(get, set, playerId, "kirala", amount),
       firePlayer: (playerId) => releasePlayer(get, set, playerId, "kov", 0),
@@ -283,14 +306,15 @@ export const useGalaStore = create<GalaState>()(
         const tx = state.transactions.find((t) => t.id === transactionId);
         if (!tx) return;
         const transactions = state.transactions.filter((t) => t.id !== transactionId);
+        const loanedIds = state.loanedIds.filter((id) => id !== tx.playerId);
 
-        if (tx.type === "satin-al") {
+        if (tx.type === "satin-al" || tx.type === "kirala-al") {
           const { boards, squadIds } = removeFromEverywhere(state.boards, state.squadIds, tx.playerId);
           const prospects = [...state.prospects, tx.playerId];
-          set({ transactions, boards, squadIds, prospects });
+          set({ transactions, boards, squadIds, prospects, loanedIds });
         } else {
           const squadIds = [...state.squadIds, tx.playerId];
-          set({ transactions, squadIds });
+          set({ transactions, squadIds, loanedIds });
         }
       },
     }),
@@ -310,6 +334,7 @@ function releasePlayer(
   if (loc.where === "none") return;
 
   const { boards, squadIds } = removeFromEverywhere(state.boards, state.squadIds, playerId);
+  const loanedIds = state.loanedIds.filter((id) => id !== playerId);
 
   const player = INITIAL_SQUAD.find((p) => p.id === playerId) ?? PROSPECTS.find((p) => p.id === playerId);
   const transaction: Transaction = {
@@ -322,9 +347,18 @@ function releasePlayer(
     createdAt: Date.now(),
   };
 
+  // Firing a player voids the fee originally paid to bring them in.
+  const transactions =
+    type === "kov"
+      ? state.transactions.map((t) =>
+          t.playerId === playerId && (t.type === "satin-al" || t.type === "kirala-al") ? { ...t, amount: 0 } : t
+        )
+      : state.transactions;
+
   set({
     boards,
     squadIds,
-    transactions: [transaction, ...state.transactions],
+    loanedIds,
+    transactions: [transaction, ...transactions],
   });
 }

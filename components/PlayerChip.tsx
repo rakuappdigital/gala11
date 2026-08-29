@@ -9,11 +9,13 @@ export default function PlayerChip({
   size = "md",
   onClick,
   draggable = true,
+  onLoan = false,
 }: {
   player: Player;
   size?: "sm" | "md" | "lg";
   onClick?: (e: React.MouseEvent) => void;
   draggable?: boolean;
+  onLoan?: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: draggable ? player.id : `static-${player.id}`,
@@ -45,7 +47,7 @@ export default function PlayerChip({
       }`}
     >
       <div
-        className="rounded-full overflow-hidden border-2 border-yellow-400 bg-red-900 shadow-md"
+        className="relative rounded-full overflow-hidden border-2 border-yellow-400 bg-red-900 shadow-md"
         style={{ width: dims.box, height: dims.box }}
       >
         <Image
@@ -56,6 +58,11 @@ export default function PlayerChip({
           className="w-full h-full object-cover"
           draggable={false}
         />
+        {onLoan && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-blue-500 border border-white text-white text-[9px] font-black flex items-center justify-center leading-none">
+            K
+          </span>
+        )}
       </div>
       <span
         className={`${dims.text} font-semibold text-white bg-black/60 px-1 rounded max-w-[64px] truncate`}

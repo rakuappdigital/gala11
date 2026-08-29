@@ -4,7 +4,7 @@ export type Player = {
   img: string;
 };
 
-export type TransactionType = "sat" | "kirala" | "satin-al" | "kov";
+export type TransactionType = "sat" | "kirala" | "satin-al" | "kirala-al" | "kov";
 
 export type Transaction = {
   id: string;
@@ -17,7 +17,11 @@ export type Transaction = {
 };
 
 export function transactionDirection(type: TransactionType): "gelir" | "gider" {
-  return type === "satin-al" ? "gider" : "gelir";
+  return type === "satin-al" || type === "kirala-al" ? "gider" : "gelir";
+}
+
+export function isIncomingTransferType(type: TransactionType): boolean {
+  return type === "satin-al" || type === "kirala-al";
 }
 
 export type SlotAssignment = Record<string, string | null>;

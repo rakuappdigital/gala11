@@ -18,12 +18,13 @@ import { ALL_PLAYERS } from "@/lib/players-data";
 import { PLAYER_ROLES, PROSPECT_ROLES, ROLE_LABELS, findSlotForRole } from "@/lib/player-roles";
 
 type Tab = "saha" | "transfer";
-type MenuState = { playerId: string; x: number; y: number; kind: "pitch" | "list" } | null;
+type MenuState = { playerId: string; x: number; y: number; kind: "pitch" | "list" | "prospect" } | null;
 type DialogState =
   | { kind: "benchConfirm"; playerId: string }
   | { kind: "fireConfirm"; playerId: string }
   | { kind: "amount"; playerId: string; type: "sat" | "kirala" }
   | { kind: "buy"; playerId: string }
+  | { kind: "loanIn"; playerId: string }
   | null;
 
 const BOARD_LABELS: Record<BoardKey, string> = { as: "As Kadro", yedek: "Yedek Kadro" };
@@ -32,6 +33,7 @@ export default function Home() {
   const {
     squadIds,
     prospects,
+    loanedIds,
     boards,
     activeBoard,
     resetSnapshots,
@@ -40,6 +42,7 @@ export default function Home() {
     setFormation,
     movePlayer,
     buyProspect,
+    loanProspectIn,
     sellPlayer,
     loanPlayer,
     firePlayer,
@@ -85,6 +88,11 @@ export default function Home() {
     setMenu({ playerId, x: e.clientX, y: e.clientY, kind: "list" });
   }
 
+  function openProspectMenu(playerId: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    setMenu({ playerId, x: e.clientX, y: e.clientY, kind: "prospect" });
+  }
+
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over) return;
@@ -100,10 +108,24 @@ export default function Home() {
     }
   }
 
+  async function waitForImages(container: HTMLElement) {
+    const imgs = Array.from(container.querySelectorAll("img"));
+    await Promise.all(
+      imgs.map((img) => {
+        if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+        return new Promise<void>((resolve) => {
+          img.addEventListener("load", () => resolve(), { once: true });
+          img.addEventListener("error", () => resolve(), { once: true });
+        });
+      })
+    );
+  }
+
   async function handleDownloadReport() {
     if (!reportRef.current) return;
     setDownloading(true);
     try {
+      await waitForImages(reportRef.current);
       const dataUrl = await toPng(reportRef.current, { pixelRatio: 2, cacheBust: true });
       const link = document.createElement("a");
       link.download = `gala11-rapor-${Date.now()}.png`;
@@ -118,6 +140,7 @@ export default function Home() {
     if (!reportRef.current) return;
     setDownloading(true);
     try {
+      await waitForImages(reportRef.current);
       const dataUrl = await toPng(reportRef.current, { pixelRatio: 2, cacheBust: true });
       const blob = await (await fetch(dataUrl)).blob();
       const file = new File([blob], `gala11-rapor-${Date.now()}.png`, { type: "image/png" });
@@ -170,6 +193,13 @@ export default function Home() {
         { label: "Sat", onClick: () => setDialog({ kind: "amount", playerId: menu.playerId, type: "sat" }) },
         { label: "Kirala", onClick: () => setDialog({ kind: "amount", playerId: menu.playerId, type: "kirala" }) },
         { label: "Kov", danger: true, onClick: () => setDialog({ kind: "fireConfirm", playerId: menu.playerId }) },
+      ]
+    : [];
+
+  const prospectActions: MenuAction[] = menu
+    ? [
+        { label: "Satın Al", onClick: () => setDialog({ kind: "buy", playerId: menu.playerId }) },
+        { label: "Kirala", onClick: () => setDialog({ kind: "loanIn", playerId: menu.playerId }) },
       ]
     : [];
 
@@ -271,22 +301,38 @@ export default function Home() {
                   starters={starters}
                   onFormationChange={setFormation}
                   onPlayerClick={openPitchMenu}
+                  loanedIds={loanedIds}
                 />
               </div>
 
               <div className="flex flex-col gap-4">
-                <StartersMirrorList formation={formation} starters={starters} onPlayerClick={openListMenu} />
-                <ListSection id="bench" title="Yedekler" playerIds={bench} limit={7} onPlayerClick={openListMenu} />
-                <ListSection id="reserve" title="Rezerv" playerIds={reserve} onPlayerClick={openListMenu} />
+                <StartersMirrorList
+                  formation={formation}
+                  starters={starters}
+                  onPlayerClick={openListMenu}
+                  loanedIds={loanedIds}
+                />
+                <ListSection
+                  id="bench"
+                  title="Yedekler"
+                  playerIds={bench}
+                  limit={7}
+                  onPlayerClick={openListMenu}
+                  loanedIds={loanedIds}
+                />
+                <ListSection
+                  id="reserve"
+                  title="Rezerv"
+                  playerIds={reserve}
+                  onPlayerClick={openListMenu}
+                  loanedIds={loanedIds}
+                />
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
               <div className="flex flex-col gap-6">
-                <ProspectsSection
-                  playerIds={prospects}
-                  onBuyClick={(playerId) => setDialog({ kind: "buy", playerId })}
-                />
+                <ProspectsSection playerIds={prospects} onPlayerClick={openProspectMenu} />
                 <FiredPlayersList transactions={transactions} onUndo={undoTransaction} />
               </div>
               <KasaPanel transactions={transactions} onUndo={undoTransaction} />
@@ -298,7 +344,7 @@ export default function Home() {
           <ActionMenu
             x={menu.x}
             y={menu.y}
-            actions={menu.kind === "pitch" ? pitchActions : listActions}
+            actions={menu.kind === "pitch" ? pitchActions : menu.kind === "list" ? listActions : prospectActions}
             onClose={() => setMenu(null)}
           />
         )}
@@ -424,6 +470,43 @@ export default function Home() {
                 onClick={() => {
                   const amount = (Number(amountInput) || 0) * unitMultiplier(amountUnit);
                   buyProspect(dialog.playerId, amount);
+                  setDialog(null);
+                  setAmountInput("");
+                }}
+                className="px-4 py-2 rounded-lg text-sm bg-yellow-400 text-red-900 font-semibold hover:bg-yellow-300"
+              >
+                Onayla
+              </button>
+            </div>
+          </Modal>
+        )}
+
+        {dialog?.kind === "loanIn" && (
+          <Modal title="Oyuncuyu Kirala (Kiralık)" onClose={() => setDialog(null)}>
+            <p className="text-white/70 text-sm mb-3">
+              {ALL_PLAYERS[dialog.playerId]?.name} için kiralık bedeli girin — Kasa&apos;da gider
+              olarak işlenecek. Kadroda profilinde küçük bir &quot;K&quot; rozeti görünecek.
+            </p>
+            <AmountInput
+              value={amountInput}
+              unit={amountUnit}
+              onValueChange={setAmountInput}
+              onUnitChange={setAmountUnit}
+            />
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => {
+                  setDialog(null);
+                  setAmountInput("");
+                }}
+                className="px-4 py-2 rounded-lg text-sm bg-white/10 hover:bg-white/20"
+              >
+                Vazgeç
+              </button>
+              <button
+                onClick={() => {
+                  const amount = (Number(amountInput) || 0) * unitMultiplier(amountUnit);
+                  loanProspectIn(dialog.playerId, amount);
                   setDialog(null);
                   setAmountInput("");
                 }}

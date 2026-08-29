@@ -10,12 +10,14 @@ export default function ListSection({
   playerIds,
   limit,
   onPlayerClick,
+  loanedIds = [],
 }: {
   id: string;
   title: string;
   playerIds: string[];
   limit?: number;
   onPlayerClick: (playerId: string, e: React.MouseEvent) => void;
+  loanedIds?: string[];
 }) {
   const { setNodeRef, isOver } = useDroppable({ id });
 
@@ -46,6 +48,7 @@ export default function ListSection({
                 player={player}
                 size="sm"
                 onClick={(e) => onPlayerClick(id, e)}
+                onLoan={loanedIds.includes(id)}
               />
             );
           })}
